@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Parking System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════════
+   ROOT VARIABLES
+═══════════════════════════════════════════════ */
+:root {
+    --bg:        #070a0f;
+    --surface:   #0d1117;
+    --card:      #111820;
+    --border:    #1e2a38;
+    --border2:   #243040;
+    --accent:    #4f9eff;
+    --accent2:   #38d9a9;
+    --free:      #00e5a0;
+    --occupied:  #ff5252;
+    --text:      #dce6f0;
+    --muted:     #6b7d8f;
+    --glow:      rgba(79,158,255,0.18);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════
+   ANIMATED BACKGROUND GRID
+═══════════════════════════════════════════════ */
+.bg-grid {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        linear-gradient(rgba(79,158,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(79,158,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+.bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bg-orb-1 {
+    width: 600px;
+    height: 600px;
+    top: -200px;
+    left: -200px;
+    background: radial-gradient(circle, rgba(79,158,255,0.08) 0%, transparent 70%);
+}
+
+.bg-orb-2 {
+    width: 500px;
+    height: 500px;
+    bottom: -150px;
+    right: -150px;
+    background: radial-gradient(circle, rgba(56,217,169,0.06) 0%, transparent 70%);
+}
+
+/* ═══════════════════════════════════════════════
+   AUTH WRAPPER
+═══════════════════════════════════════════════ */
+#authWrapper {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+}
+
+/* Logo */
+.auth-logo {
+    text-align: center;
+    margin-bottom: 36px;
+}
+
+.auth-logo .logo-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, rgba(79,158,255,0.15), rgba(56,217,169,0.1));
+    border: 1px solid rgba(79,158,255,0.25);
+    border-radius: 18px;
+    font-size: 28px;
+    margin-bottom: 16px;
+    box-shadow: 0 0 40px rgba(79,158,255,0.1);
+}
+
+.auth-logo h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+}
+
+.auth-logo p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-weight: 400;
+}
+
+/* Card */
+.auth-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 36px 32px;
+    box-shadow:
+        0 0 0 1px rgba(79,158,255,0.04),
+        0 24px 64px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+    backdrop-filter: blur(10px);
+}
+
+/* Tab switcher */
+.auth-tabs {
+    display: flex;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 28px;
+    border: 1px solid var(--border);
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 9px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 9px;
+    transition: all 0.2s;
+}
+
+.auth-tab.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(79,158,255,0.35);
+}
+
+/* Form */
+.auth-form { display: none; }
+.auth-form.active { display: block; }
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+}
+
+.form-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    transition: all 0.2s;
+    outline: none;
+}
+
+.form-input::placeholder { color: #3a4a5a; }
+
+.form-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79,158,255,0.12);
+}
+
+.form-input.error {
+    border-color: var(--occupied);
+    box-shadow: 0 0 0 3px rgba(255,82,82,0.1);
+}
+
+/* Password wrapper */
+.input-wrapper {
+    position: relative;
+}
+
+.toggle-pw {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.toggle-pw:hover { color: var(--accent); }
+
+/* Submit button */
+.btn-auth {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3d8eff, #2070e0);
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 6px 20px rgba(79,158,255,0.3);
+    margin-top: 8px;
+    letter-spacing: 0.2px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-auth::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.btn-auth:hover::after { opacity: 1; }
+.btn-auth:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(79,158,255,0.4); }
+.btn-auth:active { transform: translateY(0); }
+
+.btn-auth:disabled {
+    background: var(--border);
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+    color: var(--muted);
+}
+
+/* Error/success messages */
+.auth-message {
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: none;
+}
+
+.auth-message.error {
+    background: rgba(255,82,82,0.1);
+    border: 1px solid rgba(255,82,82,0.25);
+    color: #ff7b7b;
+    display: block;
+}
+
+.auth-message.success {
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.2);
+    color: var(--free);
+    display: block;
+}
+
+/* Loading spinner */
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Footer note */
+.auth-footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN APP
+═══════════════════════════════════════════════ */
+#appWrapper {
+    display: none;
+    position: relative;
+    z-index: 10;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+#appWrapper.visible { display: flex; }
+
+/* Top bar */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 920px;
+    max-width: 100%;
+    margin-bottom: 18px;
+    padding: 12px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.topbar-logo {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.topbar-logo span { color: var(--accent); }
+
+.sensor-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.sensor-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border2);
+    transition: background 0.3s;
+}
+
+.sensor-dot.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.sensor-dot.active { background: var(--free); box-shadow: 0 0 6px var(--free); animation: pulse 1.5s infinite; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.user-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.btn-logout {
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-logout:hover { border-color: var(--occupied); color: var(--occupied); }
+
+/* Nav tabs */
+.top-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 920px;
+    max-width: 100%;
+}
+
+.top-buttons button {
+    flex: 1;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.2s;
+}
+
+.top-buttons button.active {
+    background: linear-gradient(135deg, rgba(79,158,255,0.15), rgba(56,217,169,0.08));
+    border-color: rgba(79,158,255,0.4);
+    color: var(--accent);
+}
+
+/* Pages */
+.page { display: none; width: 100%; }
+.page.active { display: block; }
+
+/* Dashboard stats */
+.dashboard {
+    display: flex;
+    gap: 14px;
+    width: 920px;
+    max-width: 100%;
+    margin: 0 auto 18px;
+}
+
+.stat-card {
+    flex: 1;
+    background: var(--card);
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 14px 14px 0 0;
+}
+
+.stat-val { font-size: 24px; font-weight: 700; color: #fff; font-family: 'Space Mono', monospace; }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; }
+
+/* Parking area */
+.parking-area {
+    width: 920px;
+    max-width: 100%;
+    padding: 22px;
+    background: var(--card);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    margin: 0 auto;
+}
+
+.lane {
+    height: 72px;
+    margin: 16px 0;
+    position: relative;
+    background: repeating-linear-gradient(
+        45deg, #0a0e14 0px, #0a0e14 4px, #080b10 4px, #080b10 8px
+    );
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.08);
+    font-weight: 700;
+    letter-spacing: 6px;
+    font-size: 13px;
+    border: 1px solid rgba(255,255,255,0.04);
+}
+
+.lane::after {
+    content: "";
+    position: absolute;
+    width: calc(100% - 40px);
+    border-top: 2px dashed rgba(255,255,255,0.1);
+}
+
+.row { display: flex; justify-content: space-between; gap: 10px; }
+
+.slot {
+    width: 90px;
+    height: 130px;
+    border: 1.5px solid var(--border2);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(255,255,255,0.01);
+}
+
+.slot:hover { border-color: var(--accent); background: rgba(79,158,255,0.04); }
+.slot.selected { border-color: #fff; box-shadow: 0 0 18px rgba(255,255,255,0.12); }
+
+.slot::before {
+    content: attr(data-id);
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+}
+
+.slot::after {
+    content: "";
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border2);
+}
+
+.slot.sensor-enabled::after { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+.slot.free  { border-color: rgba(0,229,160,0.35); }
+.slot.occupied { border-color: rgba(255,82,82,0.4); }
+
+.car {
+    width: 50px;
+    height: 88px;
+    border-radius: 10px;
+    position: relative;
+    transition: transform 0.3s ease-out;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+
+/* Panel */
+.panel {
+    width: 920px;
+    max-width: 100%;
+    padding: 18px 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin: 16px auto 0;
+}
+
+.info-group { display: flex; gap: 10px; }
+
+.info-box {
+    flex: 1;
+    background: var(--surface);
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+.source-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 1px 5px;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+.source-tag.sensor { background: rgba(0,229,160,0.12); color: var(--free); border: 1px solid rgba(0,229,160,0.25); }
+.source-tag.manual { background: rgba(79,158,255,0.12); color: var(--accent); border: 1px solid rgba(79,158,255,0.25); }
+
+button { font-family: 'Outfit', sans-serif; }
+
+.btn-remove {
+    background: linear-gradient(135deg, #e63c3c, #c92a2a);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(255,82,82,0.25);
+}
+
+.btn-remove:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255,82,82,0.35); }
+.btn-remove:disabled { background: var(--border); box-shadow: none; cursor: not-allowed; color: var(--muted); transform: none; }
+
+/* Analytics */
+.analytics { width: 920px; max-width: 100%; margin: 0 auto; }
+
+.chart-card {
+    background: var(--card);
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.chart-card h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.8px; }
+
+.table-card {
+    background: var(--card);
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    overflow: auto;
+    margin-bottom: 16px;
+}
+
+.table-card h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.8px; }
+
+table { width: 100%; border-collapse: collapse; }
+
+table th {
+    background: var(--surface);
+    padding: 11px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    text-align: center;
+}
+
+table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--free);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(16px);
+    transition: all 0.3s;
+    z-index: 999;
+    max-width: 280px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.sensor-event { border-left-color: var(--free); }
+.toast.manual-event { border-left-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+
+<!-- ══════════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════════ -->
+<div id="authWrapper">
+    <div class="auth-container">
+
+        <div class="auth-logo">
+            <div class="logo-icon">🅿</div>
+            <h1>Smart Parking</h1>
+            <p>Intelligent parking management system</p>
+        </div>
+
+        <div class="auth-card">
+
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="loginTabBtn" onclick="switchAuthTab('login')">Sign In</button>
+                <button class="auth-tab" id="signupTabBtn" onclick="switchAuthTab('signup')">Sign Up</button>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <div class="auth-form active" id="loginForm">
+                <div id="loginMessage" class="auth-message"></div>
+
+                <div class="form-group">
+                    <label class="form-label">Email address</label>
+                    <input class="form-input" type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="input-wrapper">
+                        <input class="form-input" type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password">
+                        <button class="toggle-pw" onclick="togglePw('loginPassword', this)">👁</button>
+                    </div>
+                </div>
+
+                <button class="btn-auth" id="loginBtn" onclick="doLogin()">Sign In</button>
+            </div>
+
+            <!-- SIGNUP FORM -->
+            <div class="auth-form" id="signupForm">
+                <div id="signupMessage" class="auth-message"></div>
+
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input class="form-input" type="text" id="signupName" placeholder="John Smith" autocomplete="name">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email address</label>
+                    <input class="form-input" type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="input-wrapper">
+                        <input class="form-input" type="password" id="signupPassword" placeholder="Min. 6 characters" autocomplete="new-password">
+                        <button class="toggle-pw" onclick="togglePw('signupPassword', this)">👁</button>
+                    </div>
+                </div>
+
+                <button class="btn-auth" id="signupBtn" onclick="doSignup()">Create Account</button>
+            </div>
+
+        </div>
+
+        <div class="auth-footer">
+            Secured with JWT authentication &nbsp;·&nbsp; Smart Parking System
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════ -->
+<div id="appWrapper">
+
+    <!-- Top bar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">🅿 <span>Smart</span> Parking</div>
+            <div class="sensor-badge">
+                <div class="sensor-dot" id="sensorDot"></div>
+                <span id="sensorStatus">Waiting for Arduino…</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <div class="user-avatar" id="userAvatar">?</div>
+                <span id="userName">User</span>
+            </div>
+            <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+        </div>
+    </div>
+
+    <div class="top-buttons">
+        <button id="parkingTab" class="active" onclick="showPage('parkingPage')">🚗 Parking System</button>
+        <button id="analyticsTab" onclick="showPage('analyticsPage')">📊 Analytics Dashboard</button>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Parking Page -->
+    <div id="parkingPage" class="page active">
+
+        <div class="dashboard">
+            <div class="stat-card">
+                <div class="stat-val" id="totalRevenue">$0.00</div>
+                <div class="stat-label">Total Revenue</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" id="availableCount">12</div>
+                <div class="stat-label">Available Slots</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" id="sensorEvents">0</div>
+                <div class="stat-label">Sensor Events</div>
+            </div>
+        </div>
+
+        <div class="parking-area">
+            <div class="row">
+                <div class="slot" data-id="1"></div>
+                <div class="slot" data-id="2"></div>
+                <div class="slot" data-id="3"></div>
+                <div class="slot" data-id="4"></div>
+                <div class="slot" data-id="5"></div>
+                <div class="slot" data-id="6"></div>
+            </div>
+            <div class="lane">ENTRY ➔ ➔ ➔ EXIT</div>
+            <div class="row">
+                <div class="slot" data-id="7"></div>
+                <div class="slot" data-id="8"></div>
+                <div class="slot" data-id="9"></div>
+                <div class="slot" data-id="10"></div>
+                <div class="slot" data-id="11"></div>
+                <div class="slot" data-id="12"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="info-group">
+                <div class="info-box">
+                    <div class="stat-label">Selected</div>
+                    <div id="slotId" style="font-size:18px;color:var(--accent);font-family:'Space Mono',monospace;">None</div>
+                </div>
+                <div class="info-box">
+                    <div class="stat-label">Duration</div>
+                    <div id="time" style="font-size:18px;font-family:'Space Mono',monospace;">0s</div>
+                </div>
+                <div class="info-box">
+                    <div class="stat-label">Current Bill</div>
+                    <div id="price" style="font-size:18px;color:var(--free);font-family:'Space Mono',monospace;">$0.00</div>
+                </div>
+            </div>
+            <button class="btn-remove" onclick="removeCar()" id="removeBtn" disabled>Checkout & Remove</button>
+        </div>
+    </div>
+
+    <!-- Analytics Page -->
+    <div id="analyticsPage" class="page">
+        <div class="analytics">
+            <div class="chart-card">
+                <h2>Revenue Over Time</h2>
+                <canvas id="revenueChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>Cars Per Day</h2>
+                <canvas id="carsChart"></canvas>
+            </div>
+            <div class="table-card">
+                <h2>Parking Records</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Slot</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Duration</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div><!-- end appWrapper -->
+
+<!-- ══════════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════════ -->
+<script>
+/* ─────────────────────────────────────────
+   AUTH HELPERS
+───────────────────────────────────────── */
+const TOKEN_KEY = "sp_token";
+const USER_KEY  = "sp_user";
+
+function getToken()  { return localStorage.getItem(TOKEN_KEY); }
+function getUser()   { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } }
+function saveAuth(token, user) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+function clearAuth() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+}
+
+function authHeaders() {
+    return { "Content-Type": "application/json", "Authorization": `Bearer ${getToken()}` };
+}
+
+/* ── Page visibility ── */
+function showApp() {
+    document.getElementById("authWrapper").style.display  = "none";
+    document.getElementById("appWrapper").classList.add("visible");
+    const user = getUser();
+    if (user) {
+        document.getElementById("userName").textContent   = user.full_name || user.email;
+        document.getElementById("userAvatar").textContent = (user.full_name || user.email)[0].toUpperCase();
+    }
+    loadState();
+    initSocket();
+}
+
+function showAuth() {
+    document.getElementById("authWrapper").style.display  = "";
+    document.getElementById("appWrapper").classList.remove("visible");
+}
+
+/* ── Tab switcher ── */
+function switchAuthTab(tab) {
+    document.getElementById("loginForm").classList.toggle("active",   tab === "login");
+    document.getElementById("signupForm").classList.toggle("active",  tab === "signup");
+    document.getElementById("loginTabBtn").classList.toggle("active",  tab === "login");
+    document.getElementById("signupTabBtn").classList.toggle("active", tab === "signup");
+    document.getElementById("loginMessage").className  = "auth-message";
+    document.getElementById("signupMessage").className = "auth-message";
+}
+
+/* ── Show/clear message ── */
+function setMsg(id, text, type) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className   = "auth-message " + type;
+}
+
+function clearMsg(id) {
+    const el = document.getElementById(id);
+    el.className = "auth-message";
+}
+
+/* ── Toggle password visibility ── */
+function togglePw(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input.type === "password") { input.type = "text"; btn.textContent = "🙈"; }
+    else                           { input.type = "password"; btn.textContent = "👁"; }
+}
+
+/* ── Login ── */
+async function doLogin() {
+    const email    = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const btn      = document.getElementById("loginBtn");
+
+    clearMsg("loginMessage");
+
+    if (!email || !password) { setMsg("loginMessage", "Please fill in all fields.", "error"); return; }
+
+    btn.disabled   = true;
+    btn.innerHTML  = '<span class="spinner"></span>Signing in…';
+
+    try {
+        const res  = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            setMsg("loginMessage", data.message || "Login failed.", "error");
+        } else {
+            saveAuth(data.token, data.user);
+            showApp();
+        }
+    } catch (err) {
+        setMsg("loginMessage", "Server error. Please try again.", "error");
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = "Sign In";
+    }
+}
+
+/* ── Signup ── */
+async function doSignup() {
+    const full_name = document.getElementById("signupName").value.trim();
+    const email     = document.getElementById("signupEmail").value.trim();
+    const password  = document.getElementById("signupPassword").value;
+    const btn       = document.getElementById("signupBtn");
+
+    clearMsg("signupMessage");
+
+    if (!full_name || !email || !password) { setMsg("signupMessage", "Please fill in all fields.", "error"); return; }
+    if (password.length < 6)               { setMsg("signupMessage", "Password must be at least 6 characters.", "error"); return; }
+
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner"></span>Creating account…';
+
+    try {
+        const res  = await fetch("/api/auth/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ full_name, email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            setMsg("signupMessage", data.message || "Sign-up failed.", "error");
+        } else {
+            saveAuth(data.token, data.user);
+            showApp();
+        }
+    } catch (err) {
+        setMsg("signupMessage", "Server error. Please try again.", "error");
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = "Create Account";
+    }
+}
+
+/* ── Logout ── */
+function doLogout() {
+    clearAuth();
+    showAuth();
+}
+
+/* Allow Enter key to submit */
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    if (document.getElementById("loginForm").classList.contains("active"))  doLogin();
+    if (document.getElementById("signupForm").classList.contains("active")) doSignup();
+});
+
+/* ─────────────────────────────────────────
+   PARKING APP
+───────────────────────────────────────── */
+const RATE_PER_MIN = 2.00;
+const TOTAL_SLOTS  = 12;
+
+const slotElements = document.querySelectorAll(".slot");
+
+let state            = Array(TOTAL_SLOTS).fill(null).map(() => ({ occupied: false, startTime: null, color: null }));
+let lifetimeEarnings = 0;
+let selectedIndex    = null;
+let sensorEventCount = 0;
+let socketRef        = null;
+let lastSensorSeen   = null;
+
+/* ── Socket init (called after login) ── */
+function initSocket() {
+    if (socketRef) return;
+
+    socketRef = io({ reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+
+    socketRef.on("connect",       () => { console.log("WebSocket connected ✓"); loadState(); });
+    socketRef.on("disconnect",    () => { console.warn("WebSocket disconnected"); });
+    socketRef.on("connect_error", () => { console.warn("WebSocket error"); });
+
+    socketRef.on("sensor-heartbeat", () => { markSensorSeen(); });
+
+    socketRef.on("update", (data) => {
+        loadState();
+        if (data && data.source === "sensor") {
+            markSensorSeen();
+            flashSensorBadge();
+            sensorEventCount++;
+            document.getElementById("sensorEvents").textContent = sensorEventCount;
+            const action = data.action === "park" ? "🚗 Car detected" : "✅ Car left";
+            showToast(`${action} — Slot ${data.slot + 1}`, "sensor-event");
+        }
+        if (document.getElementById("analyticsPage").classList.contains("active")) loadAnalytics();
+    });
+}
+
+/* ── Sensor badge ── */
+function markSensorSeen() { lastSensorSeen = Date.now(); updateSensorBadge(); }
+
+function updateSensorBadge() {
+    const dot   = document.getElementById("sensorDot");
+    const label = document.getElementById("sensorStatus");
+    const fresh = lastSensorSeen && (Date.now() - lastSensorSeen < 15000);
+    if (fresh) {
+        if (!dot.classList.contains("active")) dot.classList.add("connected");
+        label.textContent = "Arduino connected";
+    } else {
+        dot.classList.remove("connected", "active");
+        label.textContent = "Waiting for Arduino…";
+    }
+}
+
+setInterval(updateSensorBadge, 5000);
+
+/* ── Page switch ── */
+function showPage(pageId) {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById(pageId).classList.add("active");
+    document.querySelectorAll(".top-buttons button").forEach(b => b.classList.remove("active"));
+    if (pageId === "parkingPage") document.getElementById("parkingTab").classList.add("active");
+    else { document.getElementById("analyticsTab").classList.add("active"); loadAnalytics(); }
+}
+
+/* ── Load state ── */
+async function loadState() {
+    try {
+        const res = await fetch("/api/slots", { headers: authHeaders() });
+        if (res.status === 401 || res.status === 403) { doLogout(); return; }
+        if (!res.ok) throw new Error("Bad response");
+        state = await res.json();
+        await loadRevenue();
+        updateUI();
+    } catch (e) { console.error("loadState error:", e); }
+}
+
+async function loadRevenue() {
+    try {
+        const res  = await fetch("/api/revenue", { headers: authHeaders() });
+        const data = await res.json();
+        lifetimeEarnings = data.revenue || 0;
+    } catch (e) { console.error("loadRevenue error:", e); }
+}
+
+/* ── Slot click (manual park) ── */
+slotElements.forEach((slot, index) => { slot.addEventListener("click", () => selectSlot(index)); });
+
+async function selectSlot(index) {
+    selectedIndex = index;
+    if (!state[index].occupied) {
+        await fetch(`/api/park/${index}`, { method: "POST", headers: authHeaders() });
+        await loadState();
+    }
+    updateUI();
+}
+
+/* ── Remove (manual checkout) ── */
+async function removeCar() {
+    if (selectedIndex === null || !state[selectedIndex].occupied) return;
+    await fetch(`/api/checkout/${selectedIndex}`, { method: "POST", headers: authHeaders() });
+    await loadState();
+}
+
+/* ── Update UI ── */
+function updateUI() {
+    let freeCount = 0;
+    slotElements.forEach((slot, i) => {
+        const s = state[i];
+        slot.classList.toggle("occupied", s.occupied);
+        slot.classList.toggle("free",    !s.occupied);
+        slot.classList.toggle("selected", i === selectedIndex);
+        slot.innerHTML = s.occupied
+            ? `<div class="car" style="background:linear-gradient(145deg,${s.color||"#3b82f6"},#111);border:1px solid ${s.color||"#3b82f6"};"></div>`
+            : "";
+        if (!s.occupied) freeCount++;
+    });
+
+    document.getElementById("availableCount").textContent = freeCount;
+    document.getElementById("totalRevenue").textContent   = `$${Number(lifetimeEarnings).toFixed(2)}`;
+
+    if (selectedIndex !== null) {
+        const s = state[selectedIndex];
+        document.getElementById("slotId").textContent  = "Slot " + (selectedIndex + 1);
+        document.getElementById("removeBtn").disabled  = !s.occupied;
+        if (s.occupied) {
+            const elapsed = Date.now() - new Date(s.startTime).getTime();
+            const sec     = Math.floor(elapsed / 1000);
+            const min     = Math.floor(sec / 60);
+            document.getElementById("time").textContent  = `${min}m ${sec % 60}s`;
+            document.getElementById("price").textContent = `$${((elapsed / 60000) * RATE_PER_MIN).toFixed(2)}`;
+        } else {
+            document.getElementById("time").textContent  = "---";
+            document.getElementById("price").textContent = "$0.00";
+        }
+    }
+}
+
+/* ── Sensor badge flash ── */
+function flashSensorBadge() {
+    const dot   = document.getElementById("sensorDot");
+    const label = document.getElementById("sensorStatus");
+    dot.classList.remove("connected");
+    dot.classList.add("active");
+    label.textContent = "Sensor active";
+    clearTimeout(flashSensorBadge._timer);
+    flashSensorBadge._timer = setTimeout(() => {
+        dot.classList.remove("active");
+        if (lastSensorSeen && (Date.now() - lastSensorSeen < 15000)) {
+            dot.classList.add("connected");
+            label.textContent = "Arduino connected";
+        } else { label.textContent = "Waiting for Arduino…"; }
+    }, 3000);
+}
+
+/* ── Toast ── */
+function showToast(msg, cls = "") {
+    const toast = document.getElementById("toast");
+    toast.textContent = msg;
+    toast.className   = "toast show " + cls;
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+/* ── Analytics ── */
+let revenueChartInstance = null;
+let carsChartInstance    = null;
+
+async function loadAnalytics() {
+    try {
+        const res     = await fetch("/api/records", { headers: authHeaders() });
+        const records = await res.json();
+
+        const table = document.getElementById("recordsTable");
+        table.innerHTML = "";
+        records.forEach(record => {
+            const entry    = new Date(record.entry_time).toLocaleString();
+            const exit     = record.exit_time ? new Date(record.exit_time).toLocaleString() : "Currently Parked";
+            const duration = record.duration_minutes ? record.duration_minutes.toFixed(2) + " min" : "---";
+            const amount   = record.amount_paid ? "$" + record.amount_paid.toFixed(2) : "$0.00";
+            table.innerHTML += `<tr>
+                <td>${record.slot_number + 1}</td>
+                <td>${entry}</td><td>${exit}</td>
+                <td>${duration}</td><td>${amount}</td>
+            </tr>`;
+        });
+
+        const completed = records.filter(r => r.status === "free");
+        const revLabels = completed.map(r => new Date(r.exit_time).toLocaleTimeString());
+        const revValues = completed.map(r => r.amount_paid);
+
+        if (revenueChartInstance) revenueChartInstance.destroy();
+        revenueChartInstance = new Chart(document.getElementById("revenueChart"), {
+            type: "line",
+            data: { labels: revLabels, datasets: [{ label: "Revenue ($)", data: revValues, borderColor: "#00e5a0", backgroundColor: "rgba(0,229,160,0.15)", fill: true, tension: 0.4 }] },
+            options: { plugins: { legend: { labels: { color: "#6b7d8f" } } }, scales: { x: { ticks: { color: "#6b7d8f" }, grid: { color: "#1e2a38" } }, y: { ticks: { color: "#6b7d8f" }, grid: { color: "#1e2a38" } } } }
+        });
+
+        const carsPerDay = {};
+        records.forEach(r => { if (r.entry_time) { const day = new Date(r.entry_time).toLocaleDateString(); carsPerDay[day] = (carsPerDay[day] || 0) + 1; } });
+
+        if (carsChartInstance) carsChartInstance.destroy();
+        carsChartInstance = new Chart(document.getElementById("carsChart"), {
+            type: "bar",
+            data: { labels: Object.keys(carsPerDay), datasets: [{ label: "Cars Parked", data: Object.values(carsPerDay), backgroundColor: "rgba(79,158,255,0.6)", borderColor: "#4f9eff", borderWidth: 1, borderRadius: 6 }] },
+            options: { plugins: { legend: { labels: { color: "#6b7d8f" } } }, scales: { x: { ticks: { color: "#6b7d8f" }, grid: { color: "#1e2a38" } }, y: { ticks: { color: "#6b7d8f" }, grid: { color: "#1e2a38" } } } }
+        });
+    } catch (e) { console.error("loadAnalytics error:", e); }
+}
+
+setInterval(() => { if (document.getElementById("analyticsPage").classList.contains("active")) loadAnalytics(); }, 5000);
+setInterval(updateUI, 1000);
+
+/* ─────────────────────────────────────────
+   INIT — check existing token on load
+───────────────────────────────────────── */
+(async function init() {
+    const token = getToken();
+    if (!token) { showAuth(); return; }
+
+    try {
+        const res = await fetch("/api/auth/me", { headers: authHeaders() });
+        if (res.ok) {
+            const data = await res.json();
+            saveAuth(token, data.user);
+            showApp();
+        } else {
+            clearAuth();
+            showAuth();
+        }
+    } catch {
+        // If server is unreachable, still show auth
+        clearAuth();
+        showAuth();
+    }
+})();
+</script>
+
+</body>
+</html>
